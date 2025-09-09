@@ -5,9 +5,7 @@ Configuração do Telegram Bot
 Credenciais e configurações para notificações
 """
 
-# Configurações do Telegram Bot
-TELEGRAM_BOT_TOKEN = "5295379026:AAH2AU44kh7cTOtzTxuAVxUuE2WZBT834JA"
-TELEGRAM_CHAT_ID = "-1002419962060"
+import os
 
 # Configurações de mensagens
 MESSAGE_CONFIG = {
@@ -29,23 +27,33 @@ MESSAGE_TEMPLATES = {
 }
 
 def get_telegram_config():
-    """Retorna configuração do Telegram"""
+    """
+    Retorna configuração do Telegram carregada das variáveis de ambiente.
+    
+    Returns:
+        dict: Configuração completa do Telegram
+        
+    Raises:
+        ValueError: Se as variáveis de ambiente não estiverem configuradas
+    """
+    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+    chat_id = os.getenv('TELEGRAM_CHAT_ID')
+    
+    if not bot_token:
+        raise ValueError(
+            "Token do bot Telegram não encontrado. "
+            "Configure a variável de ambiente TELEGRAM_BOT_TOKEN."
+        )
+    
+    if not chat_id:
+        raise ValueError(
+            "Chat ID do Telegram não encontrado. "
+            "Configure a variável de ambiente TELEGRAM_CHAT_ID."
+        )
+    
     return {
-        'bot_token': TELEGRAM_BOT_TOKEN,
-        'chat_id': TELEGRAM_CHAT_ID,
+        'bot_token': bot_token,
+        'chat_id': chat_id,
         'message_config': MESSAGE_CONFIG,
         'templates': MESSAGE_TEMPLATES
     }
-
-def validate_telegram_config():
-    """Valida se as configurações estão corretas"""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return False
-    
-    if not TELEGRAM_BOT_TOKEN.startswith(('1', '2', '5', '6', '7')):
-        return False
-        
-    if not TELEGRAM_CHAT_ID.startswith('-'):
-        return False
-        
-    return True
