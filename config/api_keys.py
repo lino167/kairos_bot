@@ -8,30 +8,27 @@ do sistema KAIROS. Mantenha este arquivo seguro e não o compartilhe.
 """
 
 import os
-from typing import Optional
-
-# Chave da API do Google Gemini
-GEMINI_API_KEY = "AIzaSyDI6BLfsi1Txpbx03Cw_0PPLdWpU234D7c"
 
 # Função para obter a chave da API do Gemini
-def get_gemini_api_key() -> Optional[str]:
+def get_gemini_api_key() -> str:
     """
-    Retorna a chave da API do Gemini.
-    
-    Primeiro tenta obter da variável de ambiente GEMINI_API_KEY,
-    se não encontrar, usa a chave configurada neste arquivo.
+    Retorna a chave da API do Gemini a partir da variável de ambiente.
     
     Returns:
-        str: Chave da API do Gemini ou None se não encontrada
+        str: Chave da API do Gemini
+        
+    Raises:
+        ValueError: Se a variável de ambiente GEMINI_API_KEY não estiver configurada
     """
-    # Tentar obter da variável de ambiente primeiro (mais seguro)
     api_key = os.getenv('GEMINI_API_KEY')
     
-    if api_key:
-        return api_key
+    if not api_key:
+        raise ValueError(
+            "Chave da API do Gemini não encontrada. "
+            "Configure a variável de ambiente GEMINI_API_KEY."
+        )
     
-    # Se não encontrar na variável de ambiente, usar a chave configurada
-    return GEMINI_API_KEY
+    return api_key
 
 # Validar se a chave está disponível
 def validate_gemini_key() -> bool:
@@ -41,8 +38,11 @@ def validate_gemini_key() -> bool:
     Returns:
         bool: True se a chave está disponível, False caso contrário
     """
-    key = get_gemini_api_key()
-    return key is not None and len(key) > 20  # Chaves do Google têm mais de 20 caracteres
+    try:
+        key = get_gemini_api_key()
+        return len(key) > 20  # Chaves do Google têm mais de 20 caracteres
+    except ValueError:
+        return False
 
 # Configurações adicionais para integração com Gemini
 GEMINI_CONFIG = {
@@ -57,10 +57,13 @@ if __name__ == "__main__":
     print("🔑 Testando configuração da API do Gemini...")
     
     if validate_gemini_key():
-        key = get_gemini_api_key()
-        masked_key = key[:8] + "*" * (len(key) - 12) + key[-4:]
-        print(f"✅ Chave da API encontrada: {masked_key}")
-        print(f"📊 Configuração: {GEMINI_CONFIG}")
+        try:
+            key = get_gemini_api_key()
+            masked_key = key[:8] + "*" * (len(key) - 12) + key[-4:]
+            print(f"✅ Chave da API encontrada: {masked_key}")
+            print(f"📊 Configuração: {GEMINI_CONFIG}")
+        except ValueError as e:
+            print(f"❌ Erro: {e}")
     else:
         print("❌ Chave da API não encontrada ou inválida")
-        print("💡 Verifique se a chave está configurada corretamente")
+        print("💡 Configure a variável de ambiente GEMINI_API_KEY")
