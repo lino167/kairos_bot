@@ -13,47 +13,17 @@ from pathlib import Path
 # Adiciona o diretório raiz ao path
 sys.path.append(str(Path(__file__).parent))
 
-from modules.extractor import GameExtractor
-from modules.investigator import GameInvestigator
-from modules.game_analyzer import GameAnalyzer, analyze_single_game
 from scraper.excapper_scraper import run_excapper_analysis
-from notifications.telegram_sender import TelegramSender as TelegramNotifier, send_opportunity_notification
+from notifications.telegram_sender import TelegramSender as TelegramNotifier
 from utils.logger import get_logger
-from config.settings import MESSAGES
-from config.api_keys import get_gemini_api_key, validate_gemini_key
-from config.telegram_config import get_telegram_config, validate_telegram_config
+from config.api_keys import validate_gemini_key
+from config.telegram_config import get_telegram_config
 import os
 from datetime import datetime
 
 logger = get_logger(__name__)
 
-async def run_basic_extraction():
-    """Executa extração básica de dados"""
-    logger.info("🚀 Iniciando extração básica de dados...")
-    extractor = GameExtractor()
-    await extractor.run_extraction(analyze_individual_games=False)
 
-async def run_full_analysis():
-    """Executa extração completa com análise individual"""
-    logger.info("🚀 Iniciando extração completa com análise individual...")
-    extractor = GameExtractor()
-    await extractor.run_extraction(analyze_individual_games=True)
-
-async def run_single_game_analysis(game_url):
-    """Analisa um único jogo específico"""
-    logger.info(f"🎯 Analisando jogo específico: {game_url}")
-    result = await analyze_single_game(game_url)
-    
-    if result:
-        print(f"\n✅ Análise concluída para: {result.get('teams', 'N/A')}")
-        print(f"📊 Tabelas encontradas: {len(result.get('betting_tables', {}))}")
-        print(f"📈 Dados de movimento: {len(result.get('movement_history', []))} entradas")
-        print(f"🎯 Score de completude: {result.get('analysis_metrics', {}).get('data_completeness_score', 0):.1%}")
-    else:
-        print("❌ Falha na análise do jogo")
-
-async def run_investigation():
-    """Executa investigação de dados"""
 async def run_kairos_analysis(telegram_config=None):
     """Executa análise completa KAIROS com notificações Telegram"""
     logger.info("🚀 Iniciando análise KAIROS completa...")
@@ -154,23 +124,10 @@ async def run_continuous_monitoring(telegram_config=None, interval_minutes=30):
 def load_telegram_config():
     """Carrega configuração do Telegram"""
     try:
-        # Primeiro tenta carregar das configurações do arquivo
-        if validate_telegram_config():
-            return get_telegram_config()
-        
-        # Fallback para variáveis de ambiente
-        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-        chat_id = os.getenv('TELEGRAM_CHAT_ID')
-        
-        if bot_token and chat_id:
-            return {
-                'bot_token': bot_token,
-                'chat_id': chat_id
-            }
+        return get_telegram_config()
     except Exception as e:
         logger.warning(f"Erro ao carregar configuração Telegram: {e}")
-    
-    return None
+        return None
 
 async def main():
     """Função principal"""
