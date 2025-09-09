@@ -914,6 +914,214 @@ async def extract_live_games_data(page):
         print(f"❌ Erro ao extrair dados da tabela: {e}")
         return []
 
+async def run_excapper_analysis():
+    """Função principal para executar análise do Excapper."""
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False)
+        context = await browser.new_context()
+        page = await context.new_page()
+        
+        try:
+            # Configurar proteções do browser
+            await setup_browser_protection(context, page)
+            
+            # Navegar para a página principal
+            print("🌐 Navegando para Excapper...")
+            await page.goto("https://www.excapper.com/", timeout=RATE_LIMIT_CONFIG['page_load_timeout'])
+            await page.wait_for_timeout(3000)
+            
+            # Clicar no botão Live - tentar diferentes seletores
+            print("🔴 Procurando botão Live...")
+            
+            # Aguardar carregamento completo
+            await page.wait_for_timeout(5000)
+            
+            # Tentar diferentes seletores para o botão Live
+            live_selectors = [
+                'a[href="/live"]',
+                'a[href="live"]', 
+                'a:has-text("Live")',
+                'a:has-text("LIVE")',
+                '.nav-link:has-text("Live")',
+                'button:has-text("Live")',
+                '[data-bs-target="#live"]'
+            ]
+            
+            live_clicked = False
+            for selector in live_selectors:
+                try:
+                    live_button = await page.query_selector(selector)
+                    if live_button:
+                        print(f"✅ Botão Live encontrado com seletor: {selector}")
+                        await live_button.click()
+                        live_clicked = True
+                        break
+                except Exception as e:
+                    continue
+            
+            if not live_clicked:
+                print("⚠️ Botão Live não encontrado, tentando navegar diretamente...")
+                await page.goto("https://www.excapper.com/live", timeout=RATE_LIMIT_CONFIG['page_load_timeout'])
+            
+            # Aguardar carregamento da página Live
+            await page.wait_for_timeout(5000)
+            
+            # Extrair dados dos jogos
+            print("📊 Extraindo dados dos jogos ao vivo...")
+            games_data = await extract_live_games_data(page)
+            
+            if games_data:
+                print(f"\n📋 Encontrados {len(games_data)} jogos ao vivo")
+                
+                # Processar cada jogo individualmente
+                processed_games = []
+                
+                for i, game in enumerate(games_data[:5], 1):  # Limitar a 5 jogos
+                    print(f"\n🎯 Processando jogo {i}/{min(5, len(games_data))}: {game['teams']}")
+                    
+                    # Verificar se há link para página individual
+                    if game.get('game_link'):
+                        print(f"🔗 Acessando página individual do jogo...")
+                        
+                        try:
+                            # Navegar para página do jogo
+                            await page.goto(game['game_link'], timeout=RATE_LIMIT_CONFIG['page_load_timeout'])
+                            await page.wait_for_timeout(3000)
+                            
+                            # Extrair detalhes adicionais
+                            game_details = await extract_live_game_details(page)
+                            game.update(game_details)
+                            
+                            # Processar mercados do jogo
+                            processed_markets = await process_game_page_tables(page)
+                            
+                            if processed_markets:
+                                print(f"✅ {len(processed_markets)} mercados processados")
+                                
+                                # Análise KAIROS
+                                print(f"🤖 Executando análise KAIROS...")
+                                kairos_analysis = analyze_betting_opportunity(processed_markets)
+                                
+                                # Verificar oportunidade com detalhes
+                                has_opportunity, opportunity_details = check_ai_opportunity(kairos_analysis)
+                                game['has_prediction'] = has_opportunity
+                                game['ai_confidence'] = extract_confidence_from_analysis(kairos_analysis)
+                                game['opportunity_details'] = opportunity_details
+                                
+                                # Análise Gemini para TODOS os jogos (análise de movimentação de mercado)
+                                try:
+                                    game_context = {
+                                        'teams': game.get('teams', 'N/A'),
+                                        'league': game.get('league', 'N/A'),
+                                        'datetime': game.get('datetime', 'N/A'),
+                                        'status': 'live',
+                                        'current_score': game.get('current_score', 'N/A'),
+                                        'match_status': game.get('match_status', 'N/A')
+                                    }
+                                    
+                                    print(f"🧠 Executando análise Gemini (movimentação de mercado)...")
+                                    gemini_analysis = analyze_with_gemini(processed_markets, game_context)
+                                    game['gemini_analysis'] = gemini_analysis
+                                    print(f"✅ Análise Gemini concluída")
+                                    
+                                    # Verificar se Gemini identificou oportunidade adicional
+                                    if gemini_analysis and "oportunidade" in gemini_analysis.lower():
+                                        print(f"🎯 Gemini identificou possível oportunidade adicional!")
+                                        
+                                except Exception as e:
+                                    print(f"⚠️ Erro na análise Gemini: {e}")
+                                    game['gemini_analysis'] = None
+                                
+                                if has_opportunity:
+                                    print(f"✅ OPORTUNIDADE IDENTIFICADA PELA KAIROS! Confiança: {game['ai_confidence']:.1f}%")
+                                    
+                                    # Criar relatório detalhado
+                                    detailed_report = create_detailed_opportunity_report(game, opportunity_details, processed_markets)
+                                    print(detailed_report)
+                                    game['detailed_report'] = detailed_report
+                                else:
+                                    print(f"⚠️ KAIROS: Nenhuma oportunidade clara (Confiança: {game['ai_confidence']:.1f}%)")
+                                
+                                game['kairos_analysis'] = kairos_analysis
+                                game['processed_markets'] = processed_markets
+                                
+                            else:
+                                print("❌ Nenhum mercado processado")
+                                game['has_prediction'] = False
+                                game['ai_confidence'] = 0
+                                
+                        except Exception as e:
+                            print(f"❌ Erro ao processar jogo individual: {e}")
+                            game['has_prediction'] = False
+                            game['ai_confidence'] = 0
+                    else:
+                        print("⚠️ Link da página individual não encontrado")
+                        game['has_prediction'] = False
+                        game['ai_confidence'] = 0
+                    
+                    processed_games.append(game)
+                    
+                    # Aguardar entre jogos para evitar sobrecarga
+                    if i < min(5, len(games_data)):
+                        await page.wait_for_timeout(2000)
+                
+                # Resumo final
+                games_with_opportunities = [g for g in processed_games if g.get('has_prediction', False)]
+                games_without_opportunities = [g for g in processed_games if not g.get('has_prediction', False)]
+                
+                print(f"\n" + "="*60)
+                print(f"📊 RESUMO DA ANÁLISE KAIROS")
+                print(f"="*60)
+                print(f"🎯 Total de jogos analisados: {len(processed_games)}")
+                print(f"✅ Jogos com oportunidades: {len(games_with_opportunities)}")
+                print(f"❌ Jogos sem oportunidades: {len(games_without_opportunities)}")
+                
+                if games_with_opportunities:
+                    print(f"\n🎯 OPORTUNIDADES IDENTIFICADAS:")
+                    for i, game in enumerate(games_with_opportunities, 1):
+                        confidence = game.get('ai_confidence', 0)
+                        teams = game.get('teams', 'N/A')
+                        league = game.get('league', 'N/A')
+                        print(f"  {i}. {teams} ({league}) - Confiança: {confidence:.1f}%")
+                
+                if games_without_opportunities:
+                    print(f"\n❌ JOGOS SEM OPORTUNIDADES CLARAS:")
+                    for i, game in enumerate(games_without_opportunities, 1):
+                        confidence = game.get('ai_confidence', 0)
+                        teams = game.get('teams', 'N/A')
+                        league = game.get('league', 'N/A')
+                        print(f"  {i}. {teams} ({league}) - Confiança: {confidence:.1f}%")
+                
+                # Salvar resultados em arquivo JSON
+                import json
+                from datetime import datetime
+                
+                results = {
+                    'timestamp': datetime.now().isoformat(),
+                    'total_games': len(processed_games),
+                    'games_with_opportunities': len(games_with_opportunities),
+                    'games_without_opportunities': len(games_without_opportunities),
+                    'processed_games': processed_games
+                }
+                
+                filename = f"kairos_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+                
+                print(f"\n💾 Resultados salvos em: {filename}")
+                
+                return processed_games
+                
+            else:
+                print("❌ Nenhum jogo ao vivo encontrado")
+                return []
+                
+        except Exception as e:
+            print(f"❌ Erro durante a execução: {e}")
+            return []
+        finally:
+            await browser.close()
+
 if __name__ == "__main__":
     async def main():
         async with async_playwright() as p:

@@ -1,5 +1,8 @@
 # KAIROS BOT - Dependências do Projeto
-# Sistema de extração e investigação de jogos de apostas
+# Sistema inteligente de análise de apostas esportivas com IA
+# Versão 2.0 - Refatorado e otimizado
+
+# === DEPENDÊNCIAS ESSENCIAIS ===
 
 # Web scraping e automação
 playwright>=1.40.0
@@ -8,6 +11,15 @@ lxml>=4.9.0
 requests>=2.31.0
 aiohttp>=3.9.0
 
+# Telegram Bot API
+python-telegram-bot>=20.7
+
+# Google Gemini AI
+google-generativeai>=0.3.0
+
+# Gerenciamento de variáveis de ambiente
+python-dotenv>=1.0.0
+
 # Data e tempo
 python-dateutil>=2.8.0
 
@@ -15,13 +27,15 @@ python-dateutil>=2.8.0
 pyyaml>=6.0
 toml>=0.10.0
 
-# Análise de dados
+# Análise de dados (essencial)
 pandas>=2.0.0
 numpy>=1.24.0
-openpyxl>=3.1.0
 
-# Desenvolvimento e testes (opcional)
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-black>=23.0.0
-flake8>=6.0.0
+# === DEPENDÊNCIAS DE DESENVOLVIMENTO (OPCIONAL) ===
+# Descomente se necessário para desenvolvimento
+
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# black>=23.0.0
+# flake8>=6.0.0
+# openpyxl>=3.1.0
