@@ -144,6 +144,34 @@ EXPORT_CONFIG = {
     'compress_output': False
 }
 
+# Configurações de análise contextual por tier de liga
+LEAGUE_TIERS = {
+    'tier1': [
+        'Champions League', 'Premier League', 'La Liga', 'Serie A',
+        'Bundesliga', 'Ligue 1', 'Europa League'
+    ],
+    'tier2': [
+        'Brasileirão Série A', 'Eredivisie', 'Primeira Liga',
+        'Championship', 'Brasileirão Série B', 'Copa Libertadores'
+    ]
+    # Tier 3 será o padrão para todas as outras ligas.
+}
+
+ANALYSIS_RULES_BY_TIER = {
+    'tier1': {
+        'min_volume': 20000,
+        'min_odds_drop_percent': -0.10  # Queda de 10%
+    },
+    'tier2': {
+        'min_volume': 8000,
+        'min_odds_drop_percent': -0.15  # Queda de 15%
+    },
+    'tier3': {
+        'min_volume': 1500,
+        'min_odds_drop_percent': -0.25  # Queda de 25%
+    }
+}
+
 # Mensagens do sistema
 MESSAGES = {
     'start': "🚀 Iniciando Kairos Bot...",

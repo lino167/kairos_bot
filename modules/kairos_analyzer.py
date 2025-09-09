@@ -11,9 +11,40 @@ Baseado na documentação do Excapper para máxima eficiência.
 """
 
 import json
+import sys
+import os
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+
+# Adicionar o diretório pai ao path para importações
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.settings import LEAGUE_TIERS, ANALYSIS_RULES_BY_TIER
+
+def determine_league_tier(league_name: str) -> str:
+    """Determina o tier de uma liga baseado nas configurações.
+    
+    Args:
+        league_name: Nome da liga
+        
+    Returns:
+        str: 'tier1', 'tier2' ou 'tier3' (padrão)
+    """
+    if not league_name:
+        return 'tier3'
+    
+    # Verificar tier1
+    for tier1_league in LEAGUE_TIERS['tier1']:
+        if tier1_league.lower() in league_name.lower():
+            return 'tier1'
+    
+    # Verificar tier2
+    for tier2_league in LEAGUE_TIERS['tier2']:
+        if tier2_league.lower() in league_name.lower():
+            return 'tier2'
+    
+    # Padrão é tier3
+    return 'tier3'
 
 @dataclass
 class BettingOpportunity:
@@ -41,18 +72,24 @@ class MarketSignal:
 class PreliminaryAnalyzer:
     """Analisador preliminar - Filtro rápido para identificar sinais de oportunidade."""
     
-    def __init__(self):
-        # Configurações dos sinais baseadas na documentação Excapper
+    def __init__(self, tier_config: Optional[Dict] = None):
+        if tier_config:
+            min_volume = tier_config.get('min_volume', 5000)
+            min_drop_percent = abs(tier_config.get('min_odds_drop_percent', -0.05)) * 100  # Converter para %
+        else:
+            min_volume = 5000
+            min_drop_percent = 5
+            
         self.config = {
             'money_way': {
-                'min_volume': 5000,      # Volume mínimo em euros
-                'high_volume': 15000,    # Volume alto
-                'very_high_volume': 30000 # Volume muito alto
+                'min_volume': min_volume,      # Volume mínimo baseado no tier
+                'high_volume': min_volume * 3,    # Volume alto (3x o mínimo)
+                'very_high_volume': min_volume * 6 # Volume muito alto (6x o mínimo)
             },
             'drop_odds': {
-                'min_drop_percent': 5,   # Queda mínima de 5%
-                'significant_drop': 10,  # Queda significativa de 10%
-                'major_drop': 20         # Queda major de 20%
+                'min_drop_percent': min_drop_percent,   # Queda mínima baseada no tier
+                'significant_drop': min_drop_percent * 2,  # Queda significativa (2x)
+                'major_drop': min_drop_percent * 4         # Queda major (4x)
             },
             'sharp_bet': {
                 'min_increase_percent': 15,  # Aumento mínimo de 15%
@@ -715,6 +752,53 @@ class KairosAnalyzer:
         
         return result
 
+def preliminary_analysis(game_data: dict, market_data: list, config: dict) -> list:
+    """Análise preliminar contextual baseada no tier da liga.
+    
+    Args:
+        game_data: Dados do jogo contendo informações da liga
+        market_data: Lista de mercados para análise
+        config: Configurações do sistema (deve conter LEAGUE_TIERS e ANALYSIS_RULES_BY_TIER)
+        
+    Returns:
+        list: Lista de oportunidades detectadas com triggered_signal
+    """
+    # Determinar o tier da liga
+    league_name = game_data.get('league', '')
+    tier = determine_league_tier(league_name)
+    
+    print(f"[KAIROS] 🏆 Liga: {league_name} | Tier: {tier.upper()}")
+    
+    # Selecionar regras baseadas no tier
+    tier_rules = config['ANALYSIS_RULES_BY_TIER'][tier]
+    print(f"[KAIROS] ⚙️ Regras {tier}: Volume mín: {tier_rules['min_volume']}€, Queda mín: {tier_rules['min_odds_drop_percent']*100}%")
+    
+    # Criar analisador preliminar com configurações do tier
+    analyzer = PreliminaryAnalyzer(tier_config=tier_rules)
+    
+    # Executar análise preliminar
+    signals = analyzer.analyze_markets_preliminary(market_data)
+    
+    # Converter sinais para formato de oportunidades com triggered_signal
+    opportunities = []
+    for signal in signals:
+        opportunity = {
+            'market_name': signal.market_name,
+            'signal_type': signal.signal_type,
+            'strength': signal.strength,
+            'description': signal.description,
+            'triggered_signal': signal.signal_type,  # Campo solicitado
+            'volume': signal.volume,
+            'odds_change': signal.odds_change,
+            'time_detected': signal.time_detected,
+            'tier': tier,
+            'league': league_name
+        }
+        opportunities.append(opportunity)
+    
+    print(f"[KAIROS] 📊 Análise preliminar {tier}: {len(opportunities)} oportunidades detectadas")
+    return opportunities
+
 # Função principal para uso externo
 def analyze_betting_opportunity(market_data: List[Dict]) -> str:
     """
@@ -740,7 +824,28 @@ def analyze_betting_opportunity_legacy(market_data: List[Dict]) -> str:
     return analyzer.format_analysis_result(opportunity)
 
 if __name__ == "__main__":
-    # Exemplo de uso da nova estratégia de dois níveis
+    # Exemplo de uso da nova análise contextual por tiers
+    
+    # Dados do jogo com diferentes ligas para teste
+    game_data_tier1 = {
+        'league': 'Premier League',  # Tier 1
+        'teams': 'Manchester City vs Liverpool',
+        'datetime': '2024-01-15 16:30:00'
+    }
+    
+    game_data_tier2 = {
+        'league': 'Brasileirão Série A',  # Tier 2
+        'teams': 'Flamengo vs Palmeiras',
+        'datetime': '2024-01-15 19:00:00'
+    }
+    
+    game_data_tier3 = {
+        'league': 'Liga Portuguesa',  # Tier 3 (padrão)
+        'teams': 'Benfica vs Porto',
+        'datetime': '2024-01-15 20:00:00'
+    }
+    
+    # Dados de mercados para teste
     sample_data = [
         {
             "market_name": "Match Odds",
@@ -769,7 +874,7 @@ if __name__ == "__main__":
             "market_name": "Both Teams to Score",
             "selections": [
                 {"name": "Type", "odds": "live"},
-                {"name": "Summ", "odds": "15000€"},  # Volume alto em live - Sharp Bet
+                {"name": "Summ", "odds": "2000€"},  # Volume baixo para teste tier 3
                 {"name": "Odds", "odds": 1.95}
             ],
             "links": {
@@ -778,11 +883,43 @@ if __name__ == "__main__":
         }
     ]
     
+    # Configurações para teste
+    test_config = {
+        'LEAGUE_TIERS': LEAGUE_TIERS,
+        'ANALYSIS_RULES_BY_TIER': ANALYSIS_RULES_BY_TIER
+    }
+    
     print("=" * 80)
-    print("🤖 KAIROS - DEMONSTRAÇÃO DA ESTRATÉGIA DE DOIS NÍVEIS")
+    print("🤖 KAIROS - DEMONSTRAÇÃO DA ANÁLISE CONTEXTUAL POR TIERS")
     print("=" * 80)
     
-    # Análise com a nova estratégia
+    # Teste com diferentes tiers de liga
+    print("\n🏆 TESTE TIER 1 - PREMIER LEAGUE (Regras mais restritivas)")
+    print("-" * 60)
+    tier1_opportunities = preliminary_analysis(game_data_tier1, sample_data, test_config)
+    print(f"Oportunidades detectadas: {len(tier1_opportunities)}")
+    for opp in tier1_opportunities:
+        print(f"  • {opp['market_name']}: {opp['description']} (Força: {opp['strength']:.2f})")
+    
+    print("\n🏆 TESTE TIER 2 - BRASILEIRÃO (Regras intermediárias)")
+    print("-" * 60)
+    tier2_opportunities = preliminary_analysis(game_data_tier2, sample_data, test_config)
+    print(f"Oportunidades detectadas: {len(tier2_opportunities)}")
+    for opp in tier2_opportunities:
+        print(f"  • {opp['market_name']}: {opp['description']} (Força: {opp['strength']:.2f})")
+    
+    print("\n🏆 TESTE TIER 3 - LIGA PORTUGUESA (Regras mais flexíveis)")
+    print("-" * 60)
+    tier3_opportunities = preliminary_analysis(game_data_tier3, sample_data, test_config)
+    print(f"Oportunidades detectadas: {len(tier3_opportunities)}")
+    for opp in tier3_opportunities:
+        print(f"  • {opp['market_name']}: {opp['description']} (Força: {opp['strength']:.2f})")
+    
+    print("\n" + "=" * 80)
+    print("🤖 DEMONSTRAÇÃO DA ESTRATÉGIA DE DOIS NÍVEIS (Tier 1)")
+    print("=" * 80)
+    
+    # Análise com a nova estratégia (usando dados tier 1)
     result = analyze_betting_opportunity(sample_data)
     print(result)
     
