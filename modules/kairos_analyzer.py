@@ -3,13 +3,17 @@
 """
 KAIROS - Analisador Inteligente de Mercados de Apostas
 
-Este módulo implementa a IA KAIROS, especializada em análise de mercados
-de apostas na Betfair para identificar oportunidades de valor.
+Este módulo implementa a estratégia de dois níveis:
+1. Análise Preliminar (Filtro Rápido) - Identifica "sinais de fumaça"
+2. Análise Profunda (IA Gemini) - Investiga se há "fogo" real
+
+Baseado na documentação do Excapper para máxima eficiência.
 """
 
 import json
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 
 @dataclass
 class BettingOpportunity:
@@ -23,8 +27,240 @@ class BettingOpportunity:
     volume: Optional[str] = None
     odds: Optional[float] = None
 
+@dataclass
+class MarketSignal:
+    """Representa um sinal detectado na análise preliminar."""
+    signal_type: str  # 'money_way', 'drop_odds', 'sharp_bet'
+    strength: float   # 0.0 a 1.0
+    description: str
+    market_name: str
+    volume: Optional[int] = None
+    odds_change: Optional[float] = None
+    time_detected: Optional[str] = None
+
+class PreliminaryAnalyzer:
+    """Analisador preliminar - Filtro rápido para identificar sinais de oportunidade."""
+    
+    def __init__(self):
+        # Configurações dos sinais baseadas na documentação Excapper
+        self.config = {
+            'money_way': {
+                'min_volume': 5000,      # Volume mínimo em euros
+                'high_volume': 15000,    # Volume alto
+                'very_high_volume': 30000 # Volume muito alto
+            },
+            'drop_odds': {
+                'min_drop_percent': 5,   # Queda mínima de 5%
+                'significant_drop': 10,  # Queda significativa de 10%
+                'major_drop': 20         # Queda major de 20%
+            },
+            'sharp_bet': {
+                'min_increase_percent': 15,  # Aumento mínimo de 15%
+                'significant_increase': 30,  # Aumento significativo de 30%
+                'major_increase': 50         # Aumento major de 50%
+            }
+        }
+    
+    def analyze_markets_preliminary(self, market_data: List[Dict]) -> List[MarketSignal]:
+        """Análise preliminar de todos os mercados - Identifica sinais de fumaça."""
+        print("[KAIROS] 🔍 Iniciando análise preliminar (filtro rápido)...")
+        
+        signals = []
+        
+        for market in market_data:
+            market_signals = self._analyze_market_signals(market)
+            signals.extend(market_signals)
+        
+        # Filtrar apenas sinais significativos
+        significant_signals = [s for s in signals if s.strength >= 0.6]
+        
+        print(f"[KAIROS] 📊 Análise preliminar concluída: {len(significant_signals)} sinais detectados")
+        return significant_signals
+    
+    def _analyze_market_signals(self, market: Dict) -> List[MarketSignal]:
+        """Analisa um mercado individual em busca dos três sinais principais."""
+        market_name = market.get('market_name', '')
+        selections = market.get('selections', [])
+        
+        # Extrair dados do mercado
+        market_data = self._extract_market_data(selections)
+        
+        signals = []
+        
+        # Sinal 1: Money Way (Alto Volume)
+        money_signal = self._detect_money_way(market_name, market_data)
+        if money_signal:
+            signals.append(money_signal)
+        
+        # Sinal 2: Drop Odds (Queda de Odds)
+        drop_signal = self._detect_drop_odds(market_name, market_data)
+        if drop_signal:
+            signals.append(drop_signal)
+        
+        # Sinal 3: Sharp Bet (Dinheiro Súbito)
+        sharp_signal = self._detect_sharp_bet(market_name, market_data)
+        if sharp_signal:
+            signals.append(sharp_signal)
+        
+        return signals
+    
+    def _detect_money_way(self, market_name: str, data: Dict) -> Optional[MarketSignal]:
+        """Detecta sinal de Money Way - Alto volume de dinheiro."""
+        volume = self._parse_volume(data.get('volume'))
+        
+        if not volume:
+            return None
+        
+        config = self.config['money_way']
+        
+        if volume >= config['very_high_volume']:
+            strength = 1.0
+            description = f"Volume muito alto: {volume}€ (>{config['very_high_volume']}€)"
+        elif volume >= config['high_volume']:
+            strength = 0.8
+            description = f"Volume alto: {volume}€ (>{config['high_volume']}€)"
+        elif volume >= config['min_volume']:
+            strength = 0.6
+            description = f"Volume significativo: {volume}€ (>{config['min_volume']}€)"
+        else:
+            return None
+        
+        return MarketSignal(
+            signal_type='money_way',
+            strength=strength,
+            description=description,
+            market_name=market_name,
+            volume=volume,
+            time_detected=datetime.now().strftime('%H:%M:%S')
+        )
+    
+    def _detect_drop_odds(self, market_name: str, data: Dict) -> Optional[MarketSignal]:
+        """Detecta sinal de Drop Odds - Queda significativa nas odds."""
+        # Para implementar este sinal, precisaríamos de dados históricos das odds
+        # Por enquanto, vamos simular baseado em dados de 'change' se disponível
+        
+        change_data = data.get('change')
+        percent_data = data.get('percent')
+        
+        if not change_data and not percent_data:
+            return None
+        
+        # Tentar extrair porcentagem de queda
+        drop_percent = None
+        
+        if percent_data and isinstance(percent_data, str):
+            try:
+                # Extrair número da string (ex: "-15%" -> 15)
+                if '%' in percent_data and '-' in percent_data:
+                    drop_percent = abs(float(percent_data.replace('%', '').replace('-', '')))
+            except:
+                pass
+        
+        if not drop_percent:
+            return None
+        
+        config = self.config['drop_odds']
+        
+        if drop_percent >= config['major_drop']:
+            strength = 1.0
+            description = f"Queda major nas odds: -{drop_percent}% (>{config['major_drop']}%)"
+        elif drop_percent >= config['significant_drop']:
+            strength = 0.8
+            description = f"Queda significativa: -{drop_percent}% (>{config['significant_drop']}%)"
+        elif drop_percent >= config['min_drop_percent']:
+            strength = 0.6
+            description = f"Queda detectada: -{drop_percent}% (>{config['min_drop_percent']}%)"
+        else:
+            return None
+        
+        return MarketSignal(
+            signal_type='drop_odds',
+            strength=strength,
+            description=description,
+            market_name=market_name,
+            odds_change=-drop_percent,
+            time_detected=datetime.now().strftime('%H:%M:%S')
+        )
+    
+    def _detect_sharp_bet(self, market_name: str, data: Dict) -> Optional[MarketSignal]:
+        """Detecta sinal de Sharp Bet - Aumento súbito de dinheiro."""
+        # Para implementar completamente, precisaríamos de dados temporais
+        # Por enquanto, vamos usar indicadores indiretos como tipo 'live' + volume alto
+        
+        volume = self._parse_volume(data.get('volume'))
+        market_type = data.get('type')
+        
+        if not volume or market_type != 'live':
+            return None
+        
+        # Em mercados ao vivo, volume alto pode indicar movimento súbito
+        config = self.config['sharp_bet']
+        
+        if volume >= 20000:  # Volume muito alto em live
+            strength = 0.9
+            description = f"Possível sharp bet: {volume}€ em mercado ao vivo"
+        elif volume >= 10000:  # Volume alto em live
+            strength = 0.7
+            description = f"Movimento suspeito: {volume}€ em mercado ao vivo"
+        else:
+            return None
+        
+        return MarketSignal(
+            signal_type='sharp_bet',
+            strength=strength,
+            description=description,
+            market_name=market_name,
+            volume=volume,
+            time_detected=datetime.now().strftime('%H:%M:%S')
+        )
+    
+    def _extract_market_data(self, selections: List[Dict]) -> Dict:
+        """Extrai dados estruturados das seleções de um mercado."""
+        data = {
+            'type': None,
+            'volume': None,
+            'odds': None,
+            'change': None,
+            'percent': None,
+            'time': None,
+            'score': None
+        }
+        
+        for selection in selections:
+            name = selection.get('name', '').lower()
+            value = selection.get('odds')
+            
+            if 'type' in name:
+                data['type'] = value
+            elif 'summ' in name:
+                data['volume'] = value
+            elif 'odds' in name and isinstance(value, (int, float)):
+                data['odds'] = float(value)
+            elif 'change' in name:
+                data['change'] = value
+            elif 'percent' in name:
+                data['percent'] = value
+            elif 'time' in name:
+                data['time'] = value
+            elif 'score' in name:
+                data['score'] = value
+        
+        return data
+    
+    def _parse_volume(self, volume_str) -> Optional[int]:
+        """Converte string de volume para inteiro."""
+        if not volume_str:
+            return None
+        
+        try:
+            # Remove símbolos e converte (ex: "45000€" -> 45000)
+            volume_clean = str(volume_str).replace('€', '').replace(',', '').replace('.', '')
+            return int(volume_clean)
+        except (ValueError, TypeError):
+            return None
+
 class KairosAnalyzer:
-    """Analisador inteligente de mercados de apostas da Betfair."""
+    """Analisador inteligente de mercados - Estratégia de dois níveis."""
     
     def __init__(self):
         self.confidence_thresholds = {
@@ -32,6 +268,83 @@ class KairosAnalyzer:
             'medio': 0.6,
             'baixo': 0.4
         }
+        self.preliminary_analyzer = PreliminaryAnalyzer()
+    
+    def analyze_markets_two_tier(self, market_data: List[Dict]) -> Tuple[List[MarketSignal], Optional[BettingOpportunity]]:
+        """Análise de dois níveis: Preliminar + Profunda (quando necessário).
+        
+        Returns:
+            Tuple[List[MarketSignal], Optional[BettingOpportunity]]: 
+            - Lista de sinais detectados na análise preliminar
+            - Oportunidade identificada na análise profunda (se aplicável)
+        """
+        print("[KAIROS] 🎯 Iniciando análise de dois níveis...")
+        
+        # Nível 1: Análise Preliminar (Filtro Rápido)
+        signals = self.preliminary_analyzer.analyze_markets_preliminary(market_data)
+        
+        if not signals:
+            print("[KAIROS] ❌ Nenhum sinal detectado na análise preliminar")
+            return [], BettingOpportunity(
+                found=False,
+                market="N/A",
+                selection="N/A",
+                justification="Análise preliminar não detectou sinais significativos nos mercados disponíveis.",
+                confidence_level="Baixo"
+            )
+        
+        print(f"[KAIROS] ✅ {len(signals)} sinais detectados! Iniciando análise profunda...")
+        
+        # Nível 2: Análise Profunda (apenas nos mercados com sinais)
+        markets_with_signals = self._filter_markets_with_signals(market_data, signals)
+        deep_analysis = self.analyze_markets(markets_with_signals)
+        
+        return signals, deep_analysis
+    
+    def _filter_markets_with_signals(self, market_data: List[Dict], signals: List[MarketSignal]) -> List[Dict]:
+        """Filtra apenas os mercados que tiveram sinais detectados."""
+        signal_markets = {signal.market_name for signal in signals}
+        return [market for market in market_data if market.get('market_name') in signal_markets]
+    
+    def get_analysis_summary(self, signals: List[MarketSignal], opportunity: Optional[BettingOpportunity]) -> str:
+        """Gera um resumo completo da análise de dois níveis."""
+        summary_parts = []
+        
+        # Resumo dos sinais
+        if signals:
+            summary_parts.append("🔍 **SINAIS DETECTADOS (Análise Preliminar):**")
+            
+            signal_counts = {}
+            for signal in signals:
+                signal_counts[signal.signal_type] = signal_counts.get(signal.signal_type, 0) + 1
+            
+            for signal_type, count in signal_counts.items():
+                type_name = {
+                    'money_way': 'Money Way (Alto Volume)',
+                    'drop_odds': 'Drop Odds (Queda de Odds)',
+                    'sharp_bet': 'Sharp Bet (Dinheiro Súbito)'
+                }.get(signal_type, signal_type)
+                summary_parts.append(f"• {type_name}: {count} mercado(s)")
+            
+            # Detalhes dos sinais mais fortes
+            strong_signals = [s for s in signals if s.strength >= 0.8]
+            if strong_signals:
+                summary_parts.append("\n🚨 **SINAIS FORTES:**")
+                for signal in strong_signals[:3]:  # Top 3
+                    summary_parts.append(f"• {signal.market_name}: {signal.description}")
+        
+        # Resultado da análise profunda
+        summary_parts.append("\n🧠 **ANÁLISE PROFUNDA (IA):**")
+        if opportunity and opportunity.found:
+            summary_parts.append(f"✅ **OPORTUNIDADE IDENTIFICADA**")
+            summary_parts.append(f"• Mercado: {opportunity.market}")
+            summary_parts.append(f"• Seleção: {opportunity.selection}")
+            summary_parts.append(f"• Confiança: {opportunity.confidence_level}")
+            summary_parts.append(f"• Justificativa: {opportunity.justification}")
+        else:
+            summary_parts.append("❌ Nenhuma oportunidade clara identificada após análise profunda")
+        
+        return "\n".join(summary_parts)
         
     def analyze_markets(self, market_data: List[Dict]) -> BettingOpportunity:
         """
@@ -405,33 +718,78 @@ class KairosAnalyzer:
 # Função principal para uso externo
 def analyze_betting_opportunity(market_data: List[Dict]) -> str:
     """
-    Função principal para análise de oportunidades de aposta.
+    Função de conveniência para análise de oportunidades - Estratégia de dois níveis.
     
     Args:
-        market_data: Lista de mercados extraídos pelo scraper
+        market_data: Lista de mercados com dados das seleções
         
     Returns:
-        String formatada com a análise completa
+        str: Resultado formatado da análise completa
+    """
+    analyzer = KairosAnalyzer()
+    signals, opportunity = analyzer.analyze_markets_two_tier(market_data)
+    return analyzer.get_analysis_summary(signals, opportunity)
+
+def analyze_betting_opportunity_legacy(market_data: List[Dict]) -> str:
+    """
+    Função legada - Análise tradicional (apenas análise profunda).
+    Mantida para compatibilidade.
     """
     analyzer = KairosAnalyzer()
     opportunity = analyzer.analyze_markets(market_data)
     return analyzer.format_analysis_result(opportunity)
 
 if __name__ == "__main__":
-    # Teste com dados de exemplo
+    # Exemplo de uso da nova estratégia de dois níveis
     sample_data = [
         {
             "market_name": "Match Odds",
             "selections": [
                 {"name": "Type", "odds": "live"},
-                {"name": "Summ", "odds": "45000€"},
-                {"name": "Odds", "odds": 1.85}
+                {"name": "Summ", "odds": "25000€"},  # Alto volume - Money Way
+                {"name": "Odds", "odds": 1.85},
+                {"name": "Percent", "odds": "-12%"}  # Queda de odds - Drop Odds
             ],
             "links": {
                 "betfair_url": "https://www.betfair.com/exchange/plus/football/market/1.247575347"
             }
+        },
+        {
+            "market_name": "Over/Under 2.5 Goals",
+            "selections": [
+                {"name": "Type", "odds": "pre"},
+                {"name": "Summ", "odds": "8000€"},   # Volume moderado
+                {"name": "Odds", "odds": 2.10}
+            ],
+            "links": {
+                "betfair_url": "https://www.betfair.com/exchange/plus/football/market/1.247575348"
+            }
+        },
+        {
+            "market_name": "Both Teams to Score",
+            "selections": [
+                {"name": "Type", "odds": "live"},
+                {"name": "Summ", "odds": "15000€"},  # Volume alto em live - Sharp Bet
+                {"name": "Odds", "odds": 1.95}
+            ],
+            "links": {
+                "betfair_url": "https://www.betfair.com/exchange/plus/football/market/1.247575349"
+            }
         }
     ]
     
+    print("=" * 80)
+    print("🤖 KAIROS - DEMONSTRAÇÃO DA ESTRATÉGIA DE DOIS NÍVEIS")
+    print("=" * 80)
+    
+    # Análise com a nova estratégia
     result = analyze_betting_opportunity(sample_data)
     print(result)
+    
+    print("\n" + "=" * 80)
+    print("📊 COMPARAÇÃO: Análise Tradicional (Legada)")
+    print("=" * 80)
+    
+    # Comparação com análise tradicional
+    legacy_result = analyze_betting_opportunity_legacy(sample_data)
+    print(legacy_result)
