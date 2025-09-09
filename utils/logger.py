@@ -17,9 +17,9 @@ def setup_logging():
     # Cria diretório de logs se não existir
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Nome do arquivo de log com timestamp
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_filename = FILE_PATTERNS['log_file'].format(timestamp=timestamp)
+    # Nome do arquivo de log com data
+    date = datetime.now().strftime('%Y%m%d')
+    log_filename = FILE_PATTERNS['log_file'].format(date=date)
     log_filepath = LOGS_DIR / log_filename
     
     # Configuração do formatter
@@ -28,7 +28,7 @@ def setup_logging():
         datefmt=LOGGING_CONFIG['date_format']
     )
     
-    # Configuração do logger raiz
+    # Configuração do logger root
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, LOGGING_CONFIG['level']))
     
@@ -37,21 +37,19 @@ def setup_logging():
         root_logger.removeHandler(handler)
     
     # Handler para arquivo
-    if LOGGING_CONFIG['file_enabled']:
-        file_handler = logging.FileHandler(
-            log_filepath, 
-            encoding=LOGGING_CONFIG['encoding']
-        )
-        file_handler.setLevel(getattr(logging, LOGGING_CONFIG['file_level']))
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    file_handler = logging.FileHandler(
+        log_filepath, 
+        encoding='utf-8'
+    )
+    file_handler.setLevel(getattr(logging, LOGGING_CONFIG['level']))
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
     
     # Handler para console
-    if LOGGING_CONFIG['console_enabled']:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(getattr(logging, LOGGING_CONFIG['console_level']))
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(getattr(logging, LOGGING_CONFIG['level']))
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
     
     # Log inicial
     logger = logging.getLogger(__name__)

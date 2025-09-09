@@ -13,7 +13,7 @@ from playwright.async_api import async_playwright
 
 from config.settings import (
     BASE_URL, PLAYWRIGHT_CONFIG, TIMEOUTS, SELECTORS,
-    INVESTIGATION_CONFIG, FILE_PATTERNS, DATA_DIR
+    FILE_PATTERNS, DATA_DIR
 )
 from utils.logger import get_logger, LogContext
 from utils.helpers import (

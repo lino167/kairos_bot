@@ -67,7 +67,13 @@ EXTRACTION_CONFIG = {
     'retry_attempts': 3,
     'delay_between_requests': 1,
     'save_screenshots': True,
-    'save_html': True
+    'save_html': True,
+    # Configurações para análise individual
+    'max_individual_analysis': 10,
+    'individual_analysis_delay': 2,
+    'extract_betting_tables': True,
+    'extract_movement_history': True,
+    'extract_additional_stats': True
 }
 
 # Configurações de arquivos

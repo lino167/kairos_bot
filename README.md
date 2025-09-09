@@ -94,6 +94,41 @@ kairos_bot/
 2. **Tabelas Secundárias** (6-7 linhas cada)
    - Mesma estrutura da principal
 
+## 💻 Uso
+
+### Execução Básica
+```bash
+# Extração básica de dados (padrão)
+python main.py
+
+# Extração completa com análise individual de jogos
+python main.py --full
+
+# Análise de um jogo específico
+python main.py --analyze-game "https://www.excapper.com/?action=game&id=34705909"
+
+# Análise do jogo de exemplo
+python main.py --example
+
+# Apenas investigação de dados
+python main.py --investigate
+```
+
+### Análise Individual de Jogos
+
+O sistema agora suporta análise detalhada de jogos individuais:
+
+- **Extração de tabelas de apostas**: Coleta todas as tabelas disponíveis na página do jogo
+- **Histórico de movimentação**: Extrai dados temporais de mudanças nas apostas
+- **Estatísticas adicionais**: Coleta metadados e informações complementares
+- **Métricas de análise**: Calcula scores de completude e qualidade dos dados
+
+### Investigação de Dados
+```bash
+# Investigar dados extraídos
+python modules/investigator.py
+```
+
 ## 🛠️ Configuração do Ambiente
 
 ### 1. Ativar Ambiente Virtual

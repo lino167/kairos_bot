@@ -32,7 +32,7 @@ def format_timestamp(dt=None, format_type='filename'):
 
 def validate_game_data(game_data: Dict[str, Any]) -> bool:
     """Valida se os dados do jogo estão completos e corretos"""
-    required_fields = DATA_CONFIG['required_game_fields']
+    required_fields = DATA_CONFIG['required_fields']
     
     # Verifica campos obrigatórios
     for field in required_fields:

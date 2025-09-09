@@ -20,6 +20,7 @@ from config.settings import (
 )
 from utils.logger import get_logger
 from utils.helpers import format_timestamp, validate_game_data
+from modules.game_analyzer import GameAnalyzer
 
 class GameExtractor:
     """Classe responsável pela extração de dados dos jogos"""
@@ -321,8 +322,48 @@ class GameExtractor:
             await self.browser.close()
             self.logger.info(MESSAGES['cleanup'])
     
-    async def run_extraction(self):
-        """Executa o processo completo de extração"""
+    async def analyze_individual_games(self):
+        """Analisa cada jogo individualmente usando o GameAnalyzer"""
+        self.logger.info(f"🔍 Iniciando análise individual de {len(self.games_data)} jogos...")
+        
+        # Filtra jogos que têm links válidos
+        games_with_links = [game for game in self.games_data if game.get('game_link')]
+        
+        if not games_with_links:
+            self.logger.warning("⚠️ Nenhum jogo com link válido encontrado para análise individual")
+            return
+        
+        # Limita o número de jogos para análise individual se configurado
+        max_individual_analysis = EXTRACTION_CONFIG.get('max_individual_analysis', 10)
+        if len(games_with_links) > max_individual_analysis:
+            games_with_links = games_with_links[:max_individual_analysis]
+            self.logger.info(f"📊 Limitando análise individual a {max_individual_analysis} jogos")
+        
+        # Cria instância do analisador
+        analyzer = GameAnalyzer()
+        
+        try:
+            await analyzer.setup_browser()
+            await analyzer.analyze_multiple_games(games_with_links)
+            
+            # Salva resultados da análise individual
+            await analyzer.save_analysis_results()
+            analyzer.print_analysis_summary()
+            
+            # Atualiza estatísticas principais
+            self.stats['individual_analysis'] = analyzer.stats
+            
+        except Exception as e:
+            self.logger.error(f"❌ Erro durante análise individual: {e}")
+        finally:
+            await analyzer.cleanup()
+    
+    async def run_extraction(self, analyze_individual_games=False):
+        """Executa o processo completo de extração
+        
+        Args:
+            analyze_individual_games (bool): Se deve analisar cada jogo individualmente
+        """
         self.logger.info(MESSAGES['start'])
         
         try:
@@ -333,6 +374,10 @@ class GameExtractor:
             if self.games_data:
                 await self.validate_sample_links()
                 self.generate_statistics()
+                
+                # Análise individual de jogos se solicitada
+                if analyze_individual_games:
+                    await self.analyze_individual_games()
                 
                 if EXTRACTION_CONFIG['save_screenshots']:
                     await self.save_screenshots()
