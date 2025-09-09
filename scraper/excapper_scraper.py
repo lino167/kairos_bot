@@ -22,7 +22,8 @@ from typing import List, Dict, Optional
 
 # Adicionar o diretório pai ao path para importar módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.kairos_analyzer import analyze_betting_opportunity
+from modules.kairos_analyzer import analyze_betting_opportunity, preliminary_analysis
+from config.settings import LEAGUE_TIERS, ANALYSIS_RULES_BY_TIER
 from modules.gemini_analyzer import analyze_with_gemini
 
 # Configurações de rate limiting para proteção
@@ -394,9 +395,23 @@ async def process_multiple_games_safely(live_games_data: List[Dict], page) -> Li
             if processed_markets:
                 print(f"✅ {len(processed_markets)} mercados processados")
                 
-                # Análise KAIROS
+                # Análise KAIROS com contexto por tiers
                 print(f"🤖 Executando análise KAIROS...")
-                kairos_analysis = analyze_betting_opportunity(processed_markets)
+                
+                # Preparar configuração para análise contextual
+                tier_config = {
+                    'LEAGUE_TIERS': LEAGUE_TIERS,
+                    'ANALYSIS_RULES_BY_TIER': ANALYSIS_RULES_BY_TIER
+                }
+                
+                # Usar análise contextual por tiers
+                tier_opportunities = preliminary_analysis(game, processed_markets, tier_config)
+                
+                # Manter compatibilidade com análise profunda se necessário
+                if tier_opportunities:
+                    kairos_analysis = analyze_betting_opportunity(processed_markets)
+                else:
+                    kairos_analysis = "❌ Nenhuma oportunidade detectada na análise preliminar por tiers"
                 
                 # Verificar oportunidade com detalhes
                 has_opportunity, opportunity_details = check_ai_opportunity(kairos_analysis)
@@ -619,8 +634,8 @@ async def get_excapper_live_games() -> list:
         list: Lista de jogos/oportunidades encontradas
     """
     async with async_playwright() as p:
-        # Iniciar navegador em modo não-headless para visualizar a automação
-        browser = await p.chromium.launch(headless=False)
+        # Iniciar navegador em modo headless (oculto)
+        browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
         try:
@@ -773,8 +788,18 @@ async def get_excapper_live_games() -> list:
                                 # 🧠 ANÁLISE KAIROS - Processar dados com IA
                         print(f"\n🤖 Iniciando análise KAIROS dos mercados...")
                         try:
-                            # Análise KAIROS local
-                            kairos_analysis = analyze_betting_opportunity(processed_markets)
+                            # Análise KAIROS com contexto por tiers
+                            tier_config = {
+                                'LEAGUE_TIERS': LEAGUE_TIERS,
+                                'ANALYSIS_RULES_BY_TIER': ANALYSIS_RULES_BY_TIER
+                            }
+                            
+                            tier_opportunities = preliminary_analysis(first_game, processed_markets, tier_config)
+                            
+                            if tier_opportunities:
+                                kairos_analysis = analyze_betting_opportunity(processed_markets)
+                            else:
+                                kairos_analysis = "❌ Nenhuma oportunidade detectada na análise preliminar por tiers"
                             print(f"\n{kairos_analysis}")
                             
                             # Verificar se há oportunidade identificada pela IA
@@ -917,7 +942,7 @@ async def extract_live_games_data(page):
 async def run_excapper_analysis():
     """Função principal para executar análise do Excapper."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
         
@@ -998,9 +1023,20 @@ async def run_excapper_analysis():
                             if processed_markets:
                                 print(f"✅ {len(processed_markets)} mercados processados")
                                 
-                                # Análise KAIROS
+                                # Análise KAIROS com contexto por tiers
                                 print(f"🤖 Executando análise KAIROS...")
-                                kairos_analysis = analyze_betting_opportunity(processed_markets)
+                                
+                                tier_config = {
+                                    'LEAGUE_TIERS': LEAGUE_TIERS,
+                                    'ANALYSIS_RULES_BY_TIER': ANALYSIS_RULES_BY_TIER
+                                }
+                                
+                                tier_opportunities = preliminary_analysis(game, processed_markets, tier_config)
+                                
+                                if tier_opportunities:
+                                    kairos_analysis = analyze_betting_opportunity(processed_markets)
+                                else:
+                                    kairos_analysis = "❌ Nenhuma oportunidade detectada na análise preliminar por tiers"
                                 
                                 # Verificar oportunidade com detalhes
                                 has_opportunity, opportunity_details = check_ai_opportunity(kairos_analysis)
@@ -1120,12 +1156,16 @@ async def run_excapper_analysis():
             print(f"❌ Erro durante a execução: {e}")
             return []
         finally:
-            await browser.close()
+            try:
+                if browser:
+                    await browser.close()
+            except Exception as close_error:
+                print(f"⚠️ Erro ao fechar browser: {close_error}")
 
 if __name__ == "__main__":
     async def main():
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
             page = await context.new_page()
             
@@ -1235,6 +1275,10 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"❌ Erro durante a execução: {e}")
             finally:
-                await browser.close()
+                try:
+                    if browser:
+                        await browser.close()
+                except Exception as close_error:
+                    print(f"⚠️ Erro ao fechar browser: {close_error}")
     
     asyncio.run(main())

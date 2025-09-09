@@ -32,8 +32,8 @@ async def inspect_excapper_selectors():
     }
     
     async with async_playwright() as p:
-        # Iniciar navegador em modo não-headless para visualizar
-        browser = await p.chromium.launch(headless=False, slow_mo=1000)
+        # Iniciar navegador em modo headless (oculto)
+        browser = await p.chromium.launch(headless=True, slow_mo=1000)
         page = await browser.new_page()
         
         try:
